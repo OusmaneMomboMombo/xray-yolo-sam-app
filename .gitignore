@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.env
+.venv
+venv/
+
+# Data & runtime
+uploads/
+data/
+runs_app/
+runs_retrain/
+
+# Models (NE PAS versionner)
+models/*.pt
+models/*.pth
+
+# OS
+.DS_Store
+Thumbs.db

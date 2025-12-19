@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Inspection X-Ray – YOLO11 + SAM</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --card: #020617;
+        --accent: #38bdf8;
+        --accent-soft: rgba(56,189,248,0.15);
+        --danger: #f97373;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+      }
+
+      /* --- Base & Layout --- */
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: radial-gradient(circle at top, #1e293b, #020617 55%);
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .app-shell {
+        width: 100%;
+        max-width: 1100px;
+        background: linear-gradient(135deg, rgba(148,163,184,0.15), transparent);
+        border-radius: 24px;
+        padding: 1px;
+        box-shadow:
+          0 25px 40px rgba(15,23,42,0.8),
+          0 0 0 1px rgba(148,163,184,0.3);
+      }
+
+      .app-inner {
+        border-radius: 23px;
+        background: radial-gradient(
+          circle at top left,
+          rgba(56,189,248,0.08),
+          #020617 40%
+        );
+        padding: 24px 28px 28px;
+        display: grid;
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2.2fr);
+        gap: 24px;
+      }
+
+      /* --- Header --- */
+      header {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 4px;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: 0.04em;
+      }
+
+      header p {
+        margin: 4px 0 0;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .badge {
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(56,189,248,0.5);
+        background: rgba(15,23,42,0.6);
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+      }
+
+      /* --- Panels --- */
+      .panel {
+        background: radial-gradient(circle at top, rgba(15,23,42,0.8), #020617 65%);
+        border-radius: 18px;
+        padding: 16px 16px 18px;
+        border: 1px solid rgba(31,41,55,0.9);
+        box-shadow: inset 0 0 0 1px rgba(15,23,42,0.9);
+      }
+
+      .panel h2 {
+        margin: 0 0 10px;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .panel h2 span.dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 12px rgba(56,189,248,0.8);
+      }
+
+      .side-panel h3 {
+        margin: 0 0 10px;
+        font-size: 14px;
+      }
+
+      .upload-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+      }
+
+      .file-input {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      /* --- Buttons --- */
+      button.primary,
+      button.secondary,
+      button.ghost {
+        border-radius: 999px;
+        border: none;
+        padding: 8px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.18s ease-out;
+        white-space: nowrap;
+      }
+
+      button.primary {
+        background: linear-gradient(135deg, #38bdf8, #22c55e);
+        color: #0f172a;
+        box-shadow: 0 12px 25px rgba(34,197,94,0.35);
+      }
+      button.primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 30px rgba(34,197,94,0.45);
+      }
+
+      button.secondary {
+        background: rgba(15,23,42,0.9);
+        color: var(--text);
+        border: 1px solid rgba(148,163,184,0.4);
+      }
+      button.secondary:hover {
+        background: rgba(15,23,42,1);
+      }
+
+      button.ghost {
+        background: transparent;
+        color: var(--muted);
+      }
+      button.ghost:hover {
+        color: var(--text);
+        background: rgba(15,23,42,0.7);
+      }
+
+      /* --- Image Area --- */
+      .image-wrapper {
+        position: relative;
+        margin-top: 8px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: radial-gradient(circle at top, #1f2937, #020617);
+        border: 1px solid rgba(30,64,175,0.9);
+        box-shadow:
+          0 18px 45px rgba(15,23,42,0.95),
+          0 0 0 1px rgba(15,23,42,0.9);
+        min-height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .image-wrapper.sam-active {
+        box-shadow:
+          0 0 0 1px rgba(56,189,248,0.9),
+          0 0 30px rgba(56,189,248,0.45),
+          0 20px 45px rgba(15,23,42,0.9);
+      }
+
+      /* Curseur crosshair quand SAM est actif */
+      .image-wrapper.sam-active img {
+        cursor: crosshair;
+      }
+
+      #yoloImage {
+        max-width: 100%;
+        display: block;
+      }
+
+      #samCanvas {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      /* --- Overlays & Loaders --- */
+      .overlay-label {
+        position: absolute;
+        top: 10px;
+        left: 12px;
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(15,23,42,0.85);
+        border: 1px solid rgba(148,163,184,0.6);
+        color: var(--muted);
+      }
+
+      .sam-mode-label {
+        position: absolute;
+        bottom: 10px;
+        left: 12px;
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(8,47,73,0.9);
+        border: 1px solid rgba(56,189,248,0.7);
+        color: var(--accent);
+        display: none;
+      }
+
+      .image-wrapper.sam-active .sam-mode-label {
+        display: inline-flex;
+      }
+
+      .point-marker {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #f97316;
+        border: 2px solid white;
+        position: absolute;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 0 12px rgba(249,115,22,0.9);
+      }
+
+      .loader {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle, rgba(15,23,42,0.85), rgba(2,6,23,0.95));
+        backdrop-filter: blur(4px);
+      }
+
+      .loader.visible {
+        display: flex;
+      }
+
+      .spinner {
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
+        border: 3px solid rgba(148,163,184,0.3);
+        border-top-color: var(--accent);
+        animation: spin 0.7s linear infinite;
+      }
+
+      .loader-text {
+        margin-left: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* --- Status & Metrics --- */
+      .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(15,23,42,0.9);
+        border: 1px solid rgba(148,163,184,0.4);
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 10px rgba(34,197,94,0.8);
+      }
+
+      .status-log {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 4px;
+        min-height: 36px;
+        white-space: pre-line;
+      }
+
+      /* --- Mask Preview --- */
+      .mask-preview {
+        margin-top: 10px;
+        background: radial-gradient(circle at top, #020617, #020617);
+        border-radius: 12px;
+        padding: 10px;
+        border: 1px solid rgba(31,41,55,0.9);
+      }
+
+      .mask-preview-inner {
+        border-radius: 10px;
+        overflow: hidden;
+        background: #020617;
+        border: 1px solid rgba(30,64,175,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 150px;
+      }
+
+      #maskResult {
+        max-width: 100%;
+        display: block;
+      }
+
+      /* --- Utilities --- */
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+
+      .cta-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+
+      .muted-caption {
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      /* --- Responsive --- */
+      @media (max-width: 900px) {
+        .app-inner {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="app-shell">
+      <div class="app-inner">
+        <header>
+          <div>
+            <h1>Inspection X-Ray – YOLO11 + SAM</h1>
+            <p>
+              Validez la prédiction YOLO ou affinez les zones de void via SAM en
+              quelques clics.
+            </p>
+          </div>
+          <div class="badge">Active Learning Pipeline</div>
+        </header>
+
+        <!-- COLONNE GAUCHE : IMAGE + INTERACTION -->
+        <section class="panel">
+          <h2><span class="dot"></span> Analyse de l’image</h2>
+
+          <form
+            class="upload-row"
+            action="/predict"
+            method="post"
+            enctype="multipart/form-data"
+          >
+            <input
+              class="file-input"
+              type="file"
+              name="image"
+              accept="image/*"
+              required
+            />
+            <button class="primary" type="submit">Analyser l’image</button>
+          </form>
+
+          <div class="hint">
+            1. Chargez une image • 2. YOLO segmente chip & voids • 3. Validez ou
+            corrigez via SAM.
+          </div>
+
+          <div id="imageContainer" class="image-wrapper">
+            {% if yolo_image %}
+            <img id="yoloImage" src="{{ yolo_image }}" onclick="onImageClick(event)" />
+            <canvas id="samCanvas"></canvas>
+
+            <div class="overlay-label">Prédiction YOLO11 (chip & voids)</div>
+            <div class="sam-mode-label" id="samModeBadge">
+              SAM actif : cliquez sur les défauts
+            </div>
+
+            <div class="loader" id="samLoader">
+              <div class="spinner"></div>
+              <div class="loader-text">
+                SAM calcule une segmentation précise…
+              </div>
+            </div>
+            {% else %}
+            <div class="hint">Aucune image analysée pour l’instant.</div>
+            {% endif %}
+          </div>
+
+          {% if yolo_image %}
+          <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap">
+            <button type="button" class="secondary" onclick="validatePrediction()">
+              ✅ Prédiction correcte
+            </button>
+            <button type="button" class="ghost" onclick="toggleSamMode()">
+              🛠 Corriger avec SAM
+            </button>
+          </div>
+          {% endif %}
+        </section>
+
+        <!-- COLONNE DROITE : ÉTAT, MESURES & SAM -->
+        <aside class="panel side-panel">
+          <h3>Statut & corrections</h3>
+
+          <!-- STATUT GLOBAL -->
+          <div class="status-chip">
+            <span class="status-dot"></span>
+            <span id="statusLabel">En attente d’analyse.</span>
+          </div>
+
+          <div class="status-log" id="statusLog">
+            Chargez une image pour lancer une prédiction YOLO.
+          </div>
+
+          <!-- MESURES YOLO AVANT CORRECTION -->
+          <div class="panel" style="margin-top: 10px">
+            <h3 style="font-size: 14px; margin-bottom: 8px">📊 Mesures YOLO</h3>
+
+            {% if void_rate_yolo is not none %}
+            <div class="status-chip">
+              <span class="status-dot"></span>
+              Void Rate initial : <b>{{ void_rate_yolo }} %</b>
+            </div>
+            {% else %}
+            <div class="status-log">Aucune mesure disponible.</div>
+            {% endif %}
+
+            <div class="muted-caption">
+              Estimation basée sur la segmentation YOLO avant correction.
+            </div>
+          </div>
+
+          <!-- MESURES APRÈS CORRECTION SAM -->
+          <div class="panel" id="correctedMetrics" style="margin-top: 10px; display: none">
+            <h3 style="font-size: 14px; margin-bottom: 8px">
+              ✅ Mesures après correction
+            </h3>
+
+            <div class="status-chip">
+              <span class="status-dot" style="background: #22c55e"></span>
+              Void Rate corrigé : <b id="voidRateCorrected">–</b> %
+            </div>
+
+            <div class="muted-caption">
+              Valeur recalculée après fusion YOLO + SAM.
+            </div>
+          </div>
+
+          <!-- APERÇU SAM -->
+          <div class="mask-preview">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <span style="font-size: 13px">Aperçu du masque SAM</span>
+            </div>
+
+            <div class="mask-preview-inner">
+              <img id="maskResult" alt="Masque SAM" />
+            </div>
+
+            <div class="cta-row">
+              <button
+                type="button"
+                class="secondary"
+                onclick="acceptCorrection()"
+              >
+                💾 Accepter la correction
+              </button>
+              <button
+                type="button"
+                class="ghost"
+                onclick="resetSamView()"
+              >
+                ↺ Réinitialiser la sélection
+              </button>
+            </div>
+
+            <div class="muted-caption" style="margin-top: 8px">
+              Vous pouvez cliquer sur plusieurs voids : les masques seront fusionnés
+              avant la sauvegarde.
+            </div>
+          </div>
+
+          <!-- ACTIVE LEARNING -->
+          <div class="panel" style="margin-top: 14px">
+            <h3 style="font-size: 14px; margin-bottom: 8px">
+              🔁 Active Learning
+            </h3>
+
+            <button
+              type="button"
+              class="primary"
+              style="width: 100%"
+              onclick="retrainYOLO()"
+            >
+              🚀 Retrain YOLO avec les corrections
+            </button>
+
+            <div class="muted-caption" style="margin-top: 6px">
+              Utilise les images corrigées pour améliorer automatiquement le modèle.
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <script>
+      // --- Variables d'état ---
+      let samEnabled = false;
+      let pointMarker = null;
+
+      // --- Fonctions utilitaires ---
+      function setStatus(main, log) {
+        document.getElementById("statusLabel").innerText = main;
+        document.getElementById("statusLog").innerText = log;
+      }
+
+      function drawMaskOverlay(maskBase64) {
+        const img = document.getElementById("yoloImage");
+        const canvas = document.getElementById("samCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const rect = img.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const maskImg = new Image();
+        maskImg.onload = function () {
+          // Canvas temporaire pour coloriser le masque
+          const off = document.createElement("canvas");
+          off.width = maskImg.width;
+          off.height = maskImg.height;
+          const octx = off.getContext("2d");
+          octx.drawImage(maskImg, 0, 0);
+          const imgData = octx.getImageData(0, 0, off.width, off.height);
+          const data = imgData.data;
+
+          // coloriser les pixels "foreground"
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i],
+              g = data[i + 1],
+              b = data[i + 2];
+            const isForeground = r > 128 || g > 128 || b > 128;
+            if (isForeground) {
+              data[i] = 56; // R
+              data[i + 1] = 189; // G
+              data[i + 2] = 248; // B
+              data[i + 3] = 150; // alpha
+            } else {
+              data[i + 3] = 0; // transparent
+            }
+          }
+
+          octx.putImageData(imgData, 0, 0);
+          // On NE nettoie PAS le canvas -> multi-sélection
+          ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+        };
+        maskImg.src = "data:image/png;base64," + maskBase64;
+      }
+
+      // --- Gestionnaires d'événements ---
+      function toggleSamMode() {
+        const wrapper = document.getElementById("imageContainer");
+        samEnabled = !samEnabled;
+
+        if (samEnabled) {
+          wrapper.classList.add("sam-active");
+          setStatus(
+            "Mode SAM activé.",
+            "Cliquez sur un ou plusieurs voids à corriger. SAM fusionnera les masques pour cette image."
+          );
+        } else {
+          wrapper.classList.remove("sam-active");
+          setStatus(
+            "Mode SAM désactivé.",
+            "Vous pouvez réactiver SAM pour corriger une autre zone, ou valider la prédiction YOLO."
+          );
+        }
+      }
+
+      function validatePrediction() {
+        fetch("/validate", { method: "POST" });
+        setStatus(
+          "Prédiction validée ✅",
+          "L’image est considérée comme correctement prédite par YOLO (aucune correction SAM)."
+        );
+      }
+
+      async function resetSamView() {
+        const canvas = document.getElementById("samCanvas");
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById("maskResult").src = "";
+        if (pointMarker && pointMarker.parentNode) {
+          pointMarker.parentNode.removeChild(pointMarker);
+        }
+
+        // Informer le backend qu'on repart à zéro sur les masques
+        await fetch("/reset_masks", { method: "POST" });
+
+        setStatus(
+          "Sélection réinitialisée.",
+          "Vous pouvez cliquer à nouveau sur l’image (si le mode SAM est activé)."
+        );
+      }
+
+      async function onImageClick(event) {
+        if (!samEnabled) {
+          console.log("SAM désactivé, clic ignoré.");
+          return;
+        }
+
+        const img = document.getElementById("yoloImage");
+        if (!img) return;
+
+        const rect = img.getBoundingClientRect();
+        const container = document.getElementById("imageContainer");
+
+        // Coordonnées relatives
+        const x_rel = (event.clientX - rect.left) / rect.width;
+        const y_rel = (event.clientY - rect.top) / rect.height;
+
+        // On remappe vers 640x640 (même échelle que côté modèle)
+        const x = Math.round(x_rel * 640);
+        const y = Math.round(y_rel * 640);
+
+        // Ajout / déplacement d'un marqueur visuel
+        pointMarker = document.createElement("div");
+        pointMarker.className = "point-marker";
+        pointMarker.style.left = `${event.clientX - rect.left}px`;
+        pointMarker.style.top = `${event.clientY - rect.top}px`;
+        container.appendChild(pointMarker);
+
+        // Loader ON
+        const loader = document.getElementById("samLoader");
+        loader.classList.add("visible");
+        setStatus(
+          "SAM en cours…",
+          "Analyse de la région sélectionnée pour générer un masque précis."
+        );
+
+        try {
+          const res = await fetch("/segment_point", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ point: [x, y] }),
+          });
+          const data = await res.json();
+          if (data.mask) {
+            drawMaskOverlay(data.mask);
+            document.getElementById("maskResult").src =
+              "data:image/png;base64," + data.mask;
+            setStatus(
+              "Masque SAM généré.",
+              "Vous pouvez cliquer sur d’autres voids pour ajouter des zones, ou accepter la correction."
+            );
+          } else if (data.error) {
+            alert("Erreur SAM : " + data.error);
+            setStatus(
+              "Erreur SAM.",
+              "Une erreur s’est produite pendant la génération du masque."
+            );
+          }
+        } catch (e) {
+          console.error(e);
+          alert("Erreur réseau avec SAM.");
+          setStatus(
+            "Erreur réseau.",
+            "Impossible de contacter le backend pour SAM."
+          );
+        } finally {
+          loader.classList.remove("visible");
+        }
+      }
+
+      async function acceptCorrection() {
+        try {
+          const res = await fetch("/save_correction", { method: "POST" });
+          const data = await res.json();
+
+          if (data.error) {
+            alert("Erreur lors de la sauvegarde : " + data.error);
+            setStatus(
+              "Erreur de sauvegarde.",
+              "La correction n'a pas pu être enregistrée."
+            );
+            return;
+          }
+
+          if (data.corrected_image_url) {
+            const img = document.getElementById("yoloImage");
+            img.src = data.corrected_image_url;
+
+            // Nettoyage overlay SAM
+            const canvas = document.getElementById("samCanvas");
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById("maskResult").src = "";
+            const container = document.getElementById("imageContainer");
+            container.classList.remove("sam-active");
+            samEnabled = false;
+
+            // Mise à jour de l’UI
+            const vr = data.void_rate_corrected;
+
+            setStatus(
+              "Correction acceptée 💾",
+              `Nouveau Void Rate (corrigé) : ${vr} %`
+            );
+
+            // Mise à jour de la section des mesures YOLO/SAM
+            const measuresBox = document.querySelector(".side-panel > .panel");
+            if (measuresBox) {
+              measuresBox.innerHTML = `
+                <h3 style="font-size: 14px; margin-bottom: 8px;">📊 Mesures après correction</h3>
+                <div class="status-chip">
+                  <span class="status-dot" style="background: #22c55e;"></span>
+                  Void Rate corrigé : <b>${vr} %</b>
+                </div>
+                <div class="muted-caption">Valeur recalculée après fusion des corrections SAM.</div>`;
+            }
+          }
+        } catch (e) {
+          console.error(e);
+          alert("Erreur réseau lors de la sauvegarde.");
+          setStatus(
+            "Erreur réseau.",
+            "Impossible de sauvegarder la correction pour le moment."
+          );
+        }
+      }
+
+      function retrainYOLO() {
+        setStatus(
+          "Ré-entraînement en cours…",
+          "YOLO est en train d'apprendre à partir des données corrigées."
+        );
+
+        fetch("/retrain", { method: "POST" })
+          .then(() => {
+            setStatus(
+              "Ré-entraînement terminé ✅",
+              "Le modèle YOLO a été mis à jour avec succès."
+            );
+          })
+          .catch(() => {
+            setStatus(
+              "Erreur de retrain ❌",
+              "Impossible de lancer le ré-entraînement."
+            );
+          });
+      }
+
+    </script>
+  </body>
+</html>
